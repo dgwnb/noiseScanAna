@@ -21,20 +21,6 @@ int MarkerStyleWheel(int idx){
   }
 }
 
-void exportMaskMap(TH2 *map, TString outputName){
-  ofstream fout(outputName);
-  int nbinx=map->GetNbinsX();
-  int nbiny=map->GetNbinsY();
-
-  for(int ibiny=1;ibiny<=nbiny;ibiny++){
-    for(int ibinx=1;ibinx<=nbinx;ibinx++){
-      fout<<(map->GetBinContent(ibinx,ibiny)>0.5?1:0)<<" ";
-    }
-    fout<<endl;
-  }
-  fout.close();
-}
-
 int main(int argc, char** argv){
   if(argc<3){
     cout<<"Usage: "<<argv[0]<<" <jobname> <input base dir>"<<endl;
@@ -46,18 +32,17 @@ int main(int argc, char** argv){
   
   TString outputDir="fig/threshold/onStave_LBLQ1/"+jobname;  
 
-  const int nstep=16;
   const int nchip=2;
     
   TString thresholdHistNames[nchip]={"threshdist_Mod_101", "threshdist_Mod_102"};
   TString FE[nchip]={"FE1", "FE2"};
 
+  const int nstep=49;		// 60-140
   double AltFines[nstep]={0};
-
+  const double altfine_min=60, altfine_max=140;
   for(int istep=0;istep<nstep;istep++){
-    // if(istep<35) AltFines[istep]=65+istep;
-    // else 
-    AltFines[istep]=65+istep*5;
+    if(istep<40) AltFines[istep]=altfine_min+istep;
+    else AltFines[istep]=100+(istep-40)*5;
   }
 
   int startIdx=1;
@@ -136,18 +121,15 @@ int main(int argc, char** argv){
     gr[ichip]->SetMarkerColor(CommonFunc::ColorWheel(ichip+1));
     gr[ichip]->SetLineColor(CommonFunc::ColorWheel(ichip+1));
     gr[ichip]->SetMarkerStyle(MarkerStyleWheel(ichip+1));
-    gr[ichip]->Draw("PL");
+    gr[ichip]->Draw("PC");
 	
     leg->AddEntry(gr[ichip],FE[ichip],"lep");
 
     ofstream fout(outputDir+"/"+FE[ichip]+".txt");
-    TSpline5 *s=new TSpline5("grs",gr[ichip]);
-    for(int altfine=65;altfine<140;altfine++){
-      fout<<altfine<<"\t"<<s->Eval(altfine)<<endl;
+
+    for(int altfine=altfine_min;altfine<altfine_max;altfine++){
+      fout<<altfine<<"\t"<<gr[ichip]->Eval(altfine)<<endl;
     }
-    s->SetLineWidth(2);
-    s->SetLineColor(CommonFunc::ColorWheel(ichip+1));
-    s->Draw("same");
     fout.close();
   }
 

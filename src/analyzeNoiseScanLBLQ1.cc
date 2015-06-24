@@ -8,6 +8,12 @@ const double epsilon=1e-6;
 const int MAXSTEP=200;
 const int MAXSAMPLE=10;
 
+const int nGangPixRow=7;
+  
+const int nPixX=80, nPixY=336;
+
+const double nPixel=26880;
+
 int MarkerStyleWheel(int idx){
   switch(idx){
   case 0: return 20;
@@ -114,6 +120,7 @@ double translateAltFine(double altfine, TString FE){
     // Create the TGraph as map
     cout<<"Create the TGraph as map"<<endl;
     ifstream fin("Input/threshold/onStave_LBLQ1/"+FE+".txt");
+    assert(fin);
     double AltFine[MAXSTEP], Threshold[MAXSTEP];
     int idx=0;
     while(fin>>AltFine[idx]>>Threshold[idx]) idx++;
@@ -138,6 +145,22 @@ double translateThreshold(double threshold, TString FE){
   return BinarySearch(new TSpline5("spline", grMap[FE]), threshold, 65, 90, 1e-3);
 }
 
+bool checkNoiseBurst(TH2 *h, TString option="noGang"){
+  int nbinx=h->GetNbinsX();
+  int nbiny=h->GetNbinsY();
+  int fired=0;
+  for(int ibinx=1;ibinx<=nbinx;ibinx++){
+    for(int ibiny=1;ibiny<=nbiny;ibiny++){
+      if(option=="noGang"&&ibiny<=nGangPixRow) continue;
+      if(h->GetBinContent(ibinx,ibiny)>0) fired++;
+    }
+  }
+
+  double total=nbinx*nbiny;
+  if(option=="noGang") total-=nGangPixRow*nPixX;
+  return fired/total>0.5/100;
+}
+
 int main(int argc, char** argv){
   if(argc<3){
     cout<<"Usage: "<<argv[0]<<" <jobname> <input list>"<<endl;
@@ -146,12 +169,6 @@ int main(int argc, char** argv){
 
   const int nchip=2;
   
-  const double nPixel=26880;
-
-  const int nGangPixRow=7;
-  
-  const int nPixX=80, nPixY=336;
-
   const double noiseThreshold=1e-12;
   TString jobname=argv[1];
   TString inputList=argv[2];
@@ -211,21 +228,24 @@ int main(int argc, char** argv){
   
   for(int ichip=0;ichip<nchip;ichip++){
     cmask[ichip]=new TCanvas("Mask"+FE[ichip],"",800,600);
-    maskOutputName[ichip]=outputDir+"/"+TString(cmask[ichip]->GetName())+".gif";
+    maskOutputName[ichip]=outputDir+"/Mask"+FE[ichip]+".gif";
     gSystem->Unlink(maskOutputName[ichip]);
   }
 
   int nstep[MAXSAMPLE]={0};
-  double rangeMin[MAXSAMPLE]={-1}, rangeMax[MAXSAMPLE]={-1};
+  double rangeMin[MAXSAMPLE][nchip]={{-1}}, rangeMax[MAXSAMPLE][nchip]={{-1}};
   double entries[MAXSAMPLE][nchip][MAXSTEP], uncert[MAXSAMPLE][nchip][MAXSTEP];
   double entries_noGang[MAXSAMPLE][nchip][MAXSTEP], uncert_noGang[MAXSAMPLE][nchip][MAXSTEP];
   double entries_noHot[MAXSAMPLE][nchip][MAXSTEP], uncert_noHot[MAXSAMPLE][nchip][MAXSTEP]; // This is the baseline figure of merit
   double entries_noEither[MAXSAMPLE][nchip][MAXSTEP], uncert_noEither[MAXSAMPLE][nchip][MAXSTEP];
 
+  double Xmax[nchip]={-1};
+
+  TString inputMaskFile[nchip];
+
+  for(int ichip=0;ichip<nchip;ichip++) inputMaskFile[ichip]="Input/hotPixMask/onStave_LBLQ1/Mask"+FE[ichip]+".txt";
   for(int isam=0;isam<nsample;isam++){
     cout<<"Processing "<<inputSet[isam]<<endl;
-    rangeMin[isam]=-1;
-    rangeMax[isam]=-1;
     
     vector<TString> inputlist=SplitString(inputArg[isam],',');
     poiName=inputlist[0];
@@ -261,6 +281,10 @@ int main(int argc, char** argv){
     // Here we load the mask from the nominal scan to make fair comparison
     
     for(int ichip=0;ichip<nchip;ichip++){
+
+      rangeMin[isam][ichip]=-1;
+      rangeMax[isam][ichip]=-1;
+
       TFile *f[MAXSTEP]={NULL};
       TH2 *hin[MAXSTEP]={NULL};
       TH1 *hnevt[MAXSTEP]={NULL};
@@ -271,29 +295,38 @@ int main(int argc, char** argv){
 	hnevt[istep]=(TH1*)f[istep]->Get(nTriggerHistName[ichip]);
       }
 
-      if(option.Contains("refmask")){
-	TString inputMaskFile=outputDir+"/Mask"+FE[ichip]+".txt";
-	ifstream fin(inputMaskFile);
-
+      if(Opt[isam].Contains("refmask")){
+	ifstream fin(inputMaskFile[ichip]);
+	assert(fin);
+	cout<<"REGTEST: Using input mask file "<<inputMaskFile[ichip]<<endl;
 	for(int ibiny=0;ibiny<nPixY;ibiny++){
 	  for(int ibinx=0;ibinx<nPixX;ibinx++){
 	    fin>>PixMask[ichip][ibinx][ibiny];
 	  }
 	}
 	fin.close();
-
       }
-
+      else{
+	cout<<"REGTEST: Use its own mask file"<<endl;
+      }
       // First do a quick analysis: Figure out threshold etc.
 
       int threshold=10;
+      int start_step=-1;
+      for(int istep=0;istep<nstep[isam];istep++){
+	if(checkNoiseBurst(hin[istep])) continue;
+	else{
+	  cout<<"REGTEST: noise burst stopped at "<<AltFines[isam][istep]<<endl;
+	  start_step=istep;
+	  break;
+	}
+      }
 
       for(int ibinx=1;ibinx<=nPixX;ibinx++){
 	for(int ibiny=1;ibiny<=nPixY;ibiny++){
 	  int counter=0;
 	  bool previousHit=false;
-
-	  for(int istep=0;istep<nstep[isam];istep++){
+	  for(int istep=start_step;istep<nstep[isam];istep++){
 	    if(!previousHit && counter<threshold) counter=0; // Reset the counter if there is no previous hits
 	    double content=hin[istep]->GetBinContent(ibinx,ibiny);
 	    if(content>0){
@@ -312,7 +345,7 @@ int main(int argc, char** argv){
 	      break;
 	    }
 	  }
-	  if(!option.Contains("refmask")){
+	  if(!Opt[isam].Contains("refmask")){
 	    if(previousHit) PixMask[ichip][ibinx-1][ibiny-1]=0;
 	    else PixMask[ichip][ibinx-1][ibiny-1]=1;
 	  }
@@ -412,20 +445,22 @@ int main(int argc, char** argv){
 	// TCanvas *c=new TCanvas(histNames[ichip],"",800,600);
 
 	// Starting point: number of fired pixels < 1%
-	if(rangeMin[isam]<0&&firedpix_noGang[ichip][istep]<0.5){
-	  rangeMin[isam]=AltFines[isam][istep];
+	if(rangeMin[isam][ichip]<0&&firedpix_noGang[ichip][istep]<0.5){
+	  rangeMin[isam][ichip]=AltFines[isam][istep];
 	  cout<<"Starting point for "<<FE[ichip]<<" decided: "
-	      <<rangeMin[isam]<<", fraction="<<firedpix_noGang[ichip][istep]
+	      <<rangeMin[isam][ichip]<<", fraction="<<firedpix_noGang[ichip][istep]
 	      <<endl;
 	}
 
 	// Ending point: occupancy<10*threshold
-	if(rangeMax[isam]<0&&entries_noHot[isam][ichip][istep]<10*noiseThreshold){
-	  rangeMax[isam]=AltFines[isam][istep];
+	if(rangeMax[isam][ichip]<0&&entries_noHot[isam][ichip][istep]<10*noiseThreshold){
+	  rangeMax[isam][ichip]=AltFines[isam][istep];
 	  cout<<"Ending point for "<<FE[ichip]<<" decided: "
-	      <<rangeMax[isam]<<", occupancy="<<entries_noHot[isam][ichip][istep]
+	      <<rangeMax[isam][ichip]<<", occupancy="<<entries_noHot[isam][ichip][istep]
 	      <<endl;
 	}
+
+	if(entries_noHot[isam][ichip][istep]>Xmax[ichip]&&isam==0) Xmax[ichip]=entries_noHot[isam][ichip][istep];
 	TString histTitle="OCCUPANCY "+FE[ichip]+Form(" AltFine %.0f from RCE", AltFines[isam][istep]);
 	csanim[ichip]->cd();
 	h->SetTitle(histTitle);
@@ -461,7 +496,12 @@ int main(int argc, char** argv){
 	if(isam<nsample-1) cmask[ichip]->Print(maskOutputName[ichip]+"+50");
 	else cmask[ichip]->Print(maskOutputName[ichip]+"++");
       }
-      if(Opt[isam].Contains("exportmask")) exportMaskMap(hframe, outputDir+"/Mask"+FE[ichip]+".txt");
+      if(Opt[isam].Contains("exportmask")){
+	exportMaskMap(hframe, outputDir+"/Mask"+FE[ichip]+".txt");
+
+	inputMaskFile[ichip]=outputDir+"/Mask"+FE[ichip]+".txt";
+	cout<<"REGTEST: Export output mask file "<<inputMaskFile[ichip]<<endl;
+      }
     }
     
   }
@@ -487,7 +527,7 @@ int main(int argc, char** argv){
     hframe->GetXaxis()->SetTitle("Threshold / e");
     hframe->GetYaxis()->SetTitle("Averaged noise occupancy");
       
-    hframe->SetMaximum(6e-9);
+    hframe->SetMaximum(Xmax[ichip]*1.5);
     hframe->SetMinimum(5e-14);
     hframe->Draw();
       
@@ -517,13 +557,13 @@ int main(int argc, char** argv){
       gr_noHot[ichip][isam]->Draw("PL");
 
       double critical=-1;
-      if(rangeMax[isam]-rangeMin[isam]<=1){
-	rangeMax[isam]=xmax>(rangeMin[isam]+2)?(rangeMin[isam]+2):xmax;
+      if(rangeMax[isam][ichip]-rangeMin[isam][ichip]<=1){
+	rangeMax[isam][ichip]=xmax>(rangeMin[isam][ichip]+2)?(rangeMin[isam][ichip]+2):xmax;
 	cerr<<"Warning: "<<FE[ichip]<<" at "<<legtext[isam]<<" does not have enough points to perform fit. Extend the range to include three points"<<endl;
-	cout<<rangeMin[isam]<<"->"<<rangeMax[isam]<<endl;
+	cout<<rangeMin[isam][ichip]<<"->"<<rangeMax[isam][ichip]<<endl;
       }
       if(!option.Contains("nofit")){
-	gr_noHot[ichip][isam]->Fit("expo","","",translateAltFine(rangeMin[isam], FE[ichip]), translateAltFine(rangeMax[isam], FE[ichip]));
+	gr_noHot[ichip][isam]->Fit("expo","","",translateAltFine(rangeMin[isam][ichip], FE[ichip]), translateAltFine(rangeMax[isam][ichip], FE[ichip]));
 	func[ichip][isam]=gr_noHot[ichip][isam]->GetFunction("expo");
       
 	func[ichip][isam]->SetName("Expo_"+FE[ichip]+Form("_isamation%d", isam));
@@ -533,7 +573,7 @@ int main(int argc, char** argv){
 	func[ichip][isam]->DrawClone("same");
 	
 	func[ichip][isam]->SetRange(xmin_th, xmax_th);
-	func[ichip][isam]->SetLineStyle(2);
+	func[ichip][isam]->SetLineStyle(3);
 	func[ichip][isam]->DrawClone("same");
 	critical=BinarySearch(func[ichip][isam], noiseThreshold, xmin_th, xmax_th, noiseThreshold/1e3);
 	leg->AddEntry(gr_noHot[ichip][isam],legtext[isam].ReplaceAll("_"," ")+Form(": %.0fe (%.0f)", critical, translateThreshold(critical, FE[ichip])),legopt[isam]);
@@ -549,8 +589,6 @@ int main(int argc, char** argv){
     c->RedrawAxis();
     TString output1DName=outputDir+"/NoiseVsAltFine"+FE[ichip];
 
-    if(option.Contains("refmask")) output1DName+="_refmask";
-    if(option.Contains("sim")) output1DName+="_sim";
     CommonFunc::PrintCanvas(c,output1DName);
 
     c->SetLogy();
