@@ -461,7 +461,7 @@ int main(int argc, char** argv){
 	}
 
 	if(entries_noHot[isam][ichip][istep]>Xmax[ichip]&&isam==0) Xmax[ichip]=entries_noHot[isam][ichip][istep];
-	TString histTitle="OCCUPANCY "+FE[ichip]+Form(" AltFine %.0f from RCE", AltFines[isam][istep]);
+	TString histTitle="OCCUPANCY "+FE[ichip]+Form(" AltFine %.0f", AltFines[isam][istep]);
 	csanim[ichip]->cd();
 	h->SetTitle(histTitle);
 	h->Draw("colz");

@@ -79,7 +79,8 @@ void PrintTemperatureProfile (const char *fname_in, const char *fname_out) {
 
     h_temp_vs_time->Draw("AP");
 
-    PrintCanvas(c,fname_out);
+    system("mkdir -vp fig/temperatureLog/");
+    PrintCanvas(c,TString("fig/temperatureLog/")+fname_out);
     // TFile *out_file = new TFile(fname_out, "RECREATE");
 
     // if (!out_file->IsOpen()) {
