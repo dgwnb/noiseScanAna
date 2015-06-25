@@ -246,7 +246,12 @@ int main(int argc, char** argv){
   for(int ichip=0;ichip<nchip;ichip++) inputMaskFile[ichip]="Input/hotPixMask/onStave_LBLQ1/Mask"+FE[ichip]+".txt";
   for(int isam=0;isam<nsample;isam++){
     cout<<"Processing "<<inputSet[isam]<<endl;
-    
+    if(Opt[isam].Contains("stdmask")){
+      cout<<"\tREGTEST: Using standard mask"<<endl;
+      for(int ichip=0;ichip<nchip;ichip++){
+	inputMaskFile[ichip]="Input/hotPixMask/onStave_LBLQ1/Mask_standard_with_ganged_pixel.txt";
+      }
+    }
     vector<TString> inputlist=SplitString(inputArg[isam],',');
     poiName=inputlist[0];
     double start=atof(inputlist[1]);
@@ -281,7 +286,6 @@ int main(int argc, char** argv){
     // Here we load the mask from the nominal scan to make fair comparison
     
     for(int ichip=0;ichip<nchip;ichip++){
-
       rangeMin[isam][ichip]=-1;
       rangeMax[isam][ichip]=-1;
 
@@ -295,7 +299,7 @@ int main(int argc, char** argv){
 	hnevt[istep]=(TH1*)f[istep]->Get(nTriggerHistName[ichip]);
       }
 
-      if(Opt[isam].Contains("refmask")){
+      if(Opt[isam].Contains("refmask")||Opt[isam].Contains("stdmask")){
 	ifstream fin(inputMaskFile[ichip]);
 	assert(fin);
 	cout<<"REGTEST: Using input mask file "<<inputMaskFile[ichip]<<endl;
@@ -345,7 +349,7 @@ int main(int argc, char** argv){
 	      break;
 	    }
 	  }
-	  if(!Opt[isam].Contains("refmask")){
+	  if(!Opt[isam].Contains("refmask")&&!Opt[isam].Contains("stdmask")){
 	    if(previousHit) PixMask[ichip][ibinx-1][ibiny-1]=0;
 	    else PixMask[ichip][ibinx-1][ibiny-1]=1;
 	  }

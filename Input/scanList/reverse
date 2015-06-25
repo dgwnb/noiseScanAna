@@ -1,2 +1,2 @@
-calibData/onStave_LBLQ1/noiseScans/80_1                                     AltFine,60,100,1       High_to_low_(Ref._scan)   lep 2 2 2 refmask
-calibData/onStave_LBLQ1/noiseScans/noiseScan_low_to_high                                     AltFine,60,100,1       Low_to_high  lep 3 4 2 refmask
+calibData/onStave_LBLQ1/noiseScans/80_1                                     AltFine,60,100,1       High_to_low_(Ref._scan)   lep 2 1 2 refmask
+calibData/onStave_LBLQ1/noiseScans/noiseScan_low_to_high                    AltFine,60,100,1       Low_to_high               lep 3 4 2 refmask
