@@ -1,5 +1,7 @@
 #include "CommonHead.h"
 #include "CommonFunc.h"
+#include "RooFitHead.h"
+#include "RooStatsHead.h"
 
 using namespace std;
 using namespace CommonFunc;
@@ -162,8 +164,8 @@ bool checkNoiseBurst(TH2 *h, TString option="noGang"){
 }
 
 
-double Gaussian_CDF(double *x, double *p){
-  return ROOT::Math::gaussian_cdf(x[0], p[1], p[0]);
+double GausCDF_C(double *x, double *p){
+  return ROOT::Math::gaussian_cdf_c(x[0], p[1], p[0]);
 }
 
 int main(int argc, char** argv){
@@ -506,6 +508,7 @@ int main(int argc, char** argv){
 	else cmask[ichip]->Print(maskOutputName[ichip]+"++");
       }
       if(Opt[isam].Contains("exportmask")){
+	// makeAndMask(hframe, hstandard);
 	exportMaskMap(hframe, outputDir+"/Mask"+FE[ichip]+".txt");
 
 	inputMaskFile[ichip]=outputDir+"/Mask"+FE[ichip]+".txt";
@@ -572,10 +575,12 @@ int main(int argc, char** argv){
 	cout<<rangeMin[isam][ichip]<<"->"<<rangeMax[isam][ichip]<<endl;
       }
       if(!option.Contains("nofit")){
-	gr_noHot[ichip][isam]->Fit("expo","","",translateAltFine(rangeMin[isam][ichip], FE[ichip]), translateAltFine(rangeMax[isam][ichip], FE[ichip]));
-	func[ichip][isam]=gr_noHot[ichip][isam]->GetFunction("expo");
-      
-	func[ichip][isam]->SetName("Expo_"+FE[ichip]+Form("_isamation%d", isam));
+	//gr_noHot[ichip][isam]->Fit("expo","","",translateAltFine(rangeMin[isam][ichip], FE[ichip]), translateAltFine(rangeMax[isam][ichip], FE[ichip]));
+	//func[ichip][isam]=gr_noHot[ichip][isam]->GetFunction("expo");
+	// func[ichip][isam]->SetName("Expo_"+FE[ichip]+Form("_isamation%d", isam));
+	
+	func[ichip][isam]=new TF1("GausCDF_C_"+FE[ichip]+Form("_isamation%d", isam), GausCDF_C, 0, 5000, 2);
+	gr_noHot[ichip][isam]->Fit(func[ichip][isam],"","",translateAltFine(rangeMin[isam][ichip], FE[ichip]), translateAltFine(rangeMax[isam][ichip], FE[ichip]));
 	func[ichip][isam]->SetLineColor(color[isam]);
 	func[ichip][isam]->SetLineWidth(width[isam]);
       
