@@ -161,6 +161,11 @@ bool checkNoiseBurst(TH2 *h, TString option="noGang"){
   return fired/total>0.5/100;
 }
 
+
+double Gaussian_CDF(double *x, double *p){
+  return ROOT::Math::gaussian_cdf(x[0], p[1], p[0]);
+}
+
 int main(int argc, char** argv){
   if(argc<3){
     cout<<"Usage: "<<argv[0]<<" <jobname> <input list>"<<endl;
