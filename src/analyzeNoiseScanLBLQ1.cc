@@ -16,6 +16,10 @@ const int nPixX=80, nPixY=336;
 
 const double nPixel=26880;
 
+const double noiseThreshold=1e-12;
+
+const double burstThreshold=0.1;
+  
 int MarkerStyleWheel(int idx){
   switch(idx){
   case 0: return 20;
@@ -47,6 +51,28 @@ void exportMaskMap(TH2 *map, TString outputName){
     fout<<endl;
   }
   fout.close();
+}
+
+void ANDMaskMap(double input[nPixX][nPixY], double standard[nPixX][nPixY]){
+
+  for(int ibiny=0;ibiny<nPixY;ibiny++){
+    for(int ibinx=0;ibinx<nPixX;ibinx++){
+      double content=(input[ibinx][ibiny]>0.5)&&(standard[ibinx][ibiny]>0.5);
+      input[ibinx][ibiny]=content;
+    }
+  }
+}
+
+void readMaskMap(TString inputFileName, double PixMask[nPixX][nPixY]){
+  ifstream fin(inputFileName);
+  assert(fin);
+  cout<<"REGTEST: Using input mask file "<<inputFileName<<endl;
+  for(int ibiny=0;ibiny<nPixY;ibiny++){
+    for(int ibinx=0;ibinx<nPixX;ibinx++){
+      fin>>PixMask[ibinx][ibiny];
+    }
+  }
+  fin.close();
 }
 
 double BinarySearch(TF1 *s, double target, double xmin, double xmax, double tolerance=1e-3){
@@ -160,12 +186,12 @@ bool checkNoiseBurst(TH2 *h, TString option="noGang"){
 
   double total=nbinx*nbiny;
   if(option=="noGang") total-=nGangPixRow*nPixX;
-  return fired/total>0.5/100;
+  return fired/total>burstThreshold;
 }
 
 
 double GausCDF_C(double *x, double *p){
-  return ROOT::Math::gaussian_cdf_c(x[0], p[1], p[0]);
+  return ROOT::Math::gaussian_cdf_c(x[0], p[1], p[0])*p[2];
 }
 
 int main(int argc, char** argv){
@@ -176,7 +202,6 @@ int main(int argc, char** argv){
 
   const int nchip=2;
   
-  const double noiseThreshold=1e-12;
   TString jobname=argv[1];
   TString inputList=argv[2];
   
@@ -251,6 +276,10 @@ int main(int argc, char** argv){
   TString inputMaskFile[nchip];
 
   for(int ichip=0;ichip<nchip;ichip++) inputMaskFile[ichip]="Input/hotPixMask/onStave_LBLQ1/Mask"+FE[ichip]+".txt";
+  TString inputStdMaskFile="Input/hotPixMask/onStave_LBLQ1/Mask_standard_with_ganged_pixel.txt";
+  double StdPixMask[nPixX][nPixY];
+  readMaskMap(inputStdMaskFile, StdPixMask);
+  
   for(int isam=0;isam<nsample;isam++){
     cout<<"Processing "<<inputSet[isam]<<endl;
     if(Opt[isam].Contains("stdmask")){
@@ -307,15 +336,7 @@ int main(int argc, char** argv){
       }
 
       if(Opt[isam].Contains("refmask")||Opt[isam].Contains("stdmask")){
-	ifstream fin(inputMaskFile[ichip]);
-	assert(fin);
-	cout<<"REGTEST: Using input mask file "<<inputMaskFile[ichip]<<endl;
-	for(int ibiny=0;ibiny<nPixY;ibiny++){
-	  for(int ibinx=0;ibinx<nPixX;ibinx++){
-	    fin>>PixMask[ichip][ibinx][ibiny];
-	  }
-	}
-	fin.close();
+	readMaskMap(inputMaskFile[ichip], PixMask[ichip]);
       }
       else{
 	cout<<"REGTEST: Use its own mask file"<<endl;
@@ -362,7 +383,8 @@ int main(int argc, char** argv){
 	  }
 	}
       }
-
+      ANDMaskMap(PixMask[ichip],StdPixMask); // We use the standard mask from now on
+      
       outputAnimFileFE[ichip]=outputDir+"/OccupancyAnimation_"+legText[ichip]+".gif";
 
       csanim[ichip]=new TCanvas("animation"+legText[ichip],"",800,600);
@@ -456,7 +478,7 @@ int main(int argc, char** argv){
 	// TCanvas *c=new TCanvas(histNames[ichip],"",800,600);
 
 	// Starting point: number of fired pixels < 1%
-	if(rangeMin[isam][ichip]<0&&firedpix_noGang[ichip][istep]<0.5){
+	if(rangeMin[isam][ichip]<0&&firedpix_noGang[ichip][istep]<burstThreshold*100){
 	  rangeMin[isam][ichip]=AltFines[isam][istep];
 	  cout<<"Starting point for "<<FE[ichip]<<" decided: "
 	      <<rangeMin[isam][ichip]<<", fraction="<<firedpix_noGang[ichip][istep]
@@ -508,7 +530,6 @@ int main(int argc, char** argv){
 	else cmask[ichip]->Print(maskOutputName[ichip]+"++");
       }
       if(Opt[isam].Contains("exportmask")){
-	// makeAndMask(hframe, hstandard);
 	exportMaskMap(hframe, outputDir+"/Mask"+FE[ichip]+".txt");
 
 	inputMaskFile[ichip]=outputDir+"/Mask"+FE[ichip]+".txt";
@@ -575,11 +596,23 @@ int main(int argc, char** argv){
 	cout<<rangeMin[isam][ichip]<<"->"<<rangeMax[isam][ichip]<<endl;
       }
       if(!option.Contains("nofit")){
-	//gr_noHot[ichip][isam]->Fit("expo","","",translateAltFine(rangeMin[isam][ichip], FE[ichip]), translateAltFine(rangeMax[isam][ichip], FE[ichip]));
-	//func[ichip][isam]=gr_noHot[ichip][isam]->GetFunction("expo");
-	// func[ichip][isam]->SetName("Expo_"+FE[ichip]+Form("_isamation%d", isam));
+	gr_noHot[ichip][isam]->Fit("expo","","",translateAltFine(rangeMin[isam][ichip], FE[ichip]), translateAltFine(rangeMax[isam][ichip], FE[ichip]));
+	func[ichip][isam]=gr_noHot[ichip][isam]->GetFunction("expo");
+	func[ichip][isam]->SetName("Expo_"+FE[ichip]+Form("_isamation%d", isam));
 	
-	func[ichip][isam]=new TF1("GausCDF_C_"+FE[ichip]+Form("_isamation%d", isam), GausCDF_C, 0, 5000, 2);
+	// func[ichip][isam]=new TF1("GausCDF_C_"+FE[ichip]+Form("_isamation%d", isam), GausCDF_C, translateAltFine(rangeMin[isam][ichip], FE[ichip]), translateAltFine(rangeMax[isam][ichip], FE[ichip]), 3);
+	// func[ichip][isam]->SetParName(0,"Mean");
+	// func[ichip][isam]->SetParameter(0,100);
+	// func[ichip][isam]->SetParLimits(0,-10,10);
+	
+	// func[ichip][isam]->SetParName(1,"Sigma");
+	// func[ichip][isam]->SetParameter(1,100);
+	// func[ichip][isam]->SetParLimits(1,0,10000);
+	
+	// func[ichip][isam]->SetParName(2,"Constant");
+	// func[ichip][isam]->SetParameter(2,1);
+	// func[ichip][isam]->SetParLimits(2,0,2);
+	
 	gr_noHot[ichip][isam]->Fit(func[ichip][isam],"","",translateAltFine(rangeMin[isam][ichip], FE[ichip]), translateAltFine(rangeMax[isam][ichip], FE[ichip]));
 	func[ichip][isam]->SetLineColor(color[isam]);
 	func[ichip][isam]->SetLineWidth(width[isam]);
